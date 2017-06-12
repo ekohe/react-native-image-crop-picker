@@ -125,6 +125,13 @@ RCT_EXPORT_METHOD(openCamera:(NSDictionary *)options
     [self setConfiguration:options resolver:resolve rejecter:reject];
     self.cropOnly = NO;
 
+    [self capturePhoto:options resolver:resolve rejecter:reject];
+}
+
+-(void)capturePhoto:(NSDictionary *)options
+           resolver:(RCTPromiseResolveBlock)resolve
+           rejecter:(RCTPromiseRejectBlock)reject {
+
 #if TARGET_IPHONE_SIMULATOR
     self.reject(ERROR_PICKER_CANNOT_RUN_CAMERA_ON_SIMULATOR_KEY, ERROR_PICKER_CANNOT_RUN_CAMERA_ON_SIMULATOR_MSG, nil);
     return;
@@ -220,6 +227,12 @@ RCT_EXPORT_METHOD(openPicker:(NSDictionary *)options
     [self setConfiguration:options resolver:resolve rejecter:reject];
     self.cropOnly = NO;
     
+    [self imagePicker:options resolver:resolve rejecter:reject];
+}
+
+-(void)imagePicker:(NSDictionary *)options
+          resolver:(RCTPromiseResolveBlock)resolve
+          rejecter:(RCTPromiseRejectBlock)reject {
     [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
         if (status != PHAuthorizationStatusAuthorized) {
             self.reject(ERROR_PICKER_UNAUTHORIZED_KEY, ERROR_PICKER_UNAUTHORIZED_MSG, nil);
@@ -695,6 +708,47 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                   usingCropRect:(CGRect)cropRect
                   rotationAngle:(CGFloat)rotationAngle {
     [self imageCropViewController:controller didCropImage:croppedImage usingCropRect:cropRect];
+}
+
+
+// DocumentPicker
+RCT_EXPORT_METHOD(showMenu:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+
+    [self setConfiguration:options resolver:resolve rejecter:reject];
+
+    NSArray *allowedUTIs = [NSArray arrayWithObjects: @"public.image", nil];
+    UIDocumentMenuViewController *documentPicker = [[UIDocumentMenuViewController alloc] initWithDocumentTypes:(NSArray *)allowedUTIs inMode:UIDocumentPickerModeImport];
+
+    [documentPicker addOptionWithTitle:@"Photo Library" image:nil order:UIDocumentMenuOrderFirst handler:^{
+        self.cropOnly = NO;
+        [self imagePicker:options resolver:resolve rejecter:reject];
+    }];
+    [documentPicker addOptionWithTitle:@"Take Photo" image:nil order:UIDocumentMenuOrderFirst handler:^{
+        self.cropOnly = NO;
+        [self capturePhoto:options resolver:resolve rejecter:reject];
+    }];
+
+    documentPicker.delegate = self;
+    documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
+
+    UIViewController *rootViewController = [[[[UIApplication sharedApplication]delegate] window] rootViewController];
+    [rootViewController presentViewController:documentPicker animated:YES completion:nil];
+}
+
+- (void)documentMenu:(UIDocumentMenuViewController *)documentMenu didPickDocumentPicker:(UIDocumentPickerViewController *)documentPicker {
+    documentPicker.delegate = self;
+    UIViewController *rootViewController = [[[[UIApplication sharedApplication]delegate] window] rootViewController];
+    [rootViewController presentViewController:documentPicker animated:YES completion:nil];
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentAtURL:(NSURL *)url {
+    if (controller.documentPickerMode == UIDocumentPickerModeImport) {
+        NSData *data = [NSData dataWithContentsOfURL:url];
+        self.cropOnly = YES;
+        [self processSingleImagePick:[[UIImage alloc] initWithData:data] withViewController:controller];
+    }
 }
 
 @end
